@@ -153,7 +153,10 @@ export default function SignInPage() {
     try {
       console.log("Attempting Google auth...");
       const result = await signInWithGoogle();
-      
+
+      // result is null when signInWithRedirect is used (mobile) — page will reload
+      if (!result) return;
+
       console.log("Google auth successful, preparing profile...");
       await createUserProfile(result.user);
       
@@ -165,8 +168,9 @@ export default function SignInPage() {
       }, 100);
     } catch (err) {
       console.error("Google Auth Error:", err);
-      if (err.code !== "auth/popup-closed-by-user") {
-        setError("Google sign-in failed. Please try again.");
+      const suppressedErrors = ["auth/popup-closed-by-user", "auth/cancelled-popup-request"];
+      if (!suppressedErrors.includes(err.code)) {
+        setError(`Google sign-in failed: ${err.message || "Please try again."}`);
       }
     } finally {
       setGoogleLoading(false);

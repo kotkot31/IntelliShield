@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, signOut, signInWithPopup } from "firebase/auth";
+import { onAuthStateChanged, signOut, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/user-profile";
 
@@ -68,6 +68,18 @@ export function AuthProvider({ children }) {
   }, [user, loadProfile]);
 
   useEffect(() => {
+    // Handle the result after a redirect-based Google Sign-In
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          const { createUserProfile } = await import("@/lib/user-profile");
+          await createUserProfile(result.user);
+        }
+      })
+      .catch((err) => {
+        console.error("Redirect sign-in error:", err);
+      });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);          // auth state resolved
@@ -81,6 +93,12 @@ export function AuthProvider({ children }) {
   };
 
   const signInWithGoogle = async () => {
+    // Use redirect on mobile or if popup is likely to be blocked
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      await signInWithRedirect(auth, googleProvider);
+      return null; // page will reload; result handled in getRedirectResult above
+    }
     return signInWithPopup(auth, googleProvider);
   };
 
