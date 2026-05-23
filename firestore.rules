@@ -1,0 +1,171 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(data) {
+      return (signedIn() && data.owner_uid == request.auth.uid) ||
+             (data.owner_uid == "anonymous");
+    }
+
+    // Reads the caller's profile document.
+    function getCallerData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.email == 'dc.unicomtec@gmail.com' || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (getCallerData().role == 'admin' || getCallerData().role == 'asst_admin'))
+      );
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && (
+        request.auth.token.email == 'dc.unicomtec@gmail.com' || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getCallerData().role == 'admin')
+      );
+    }
+
+    function isITSecurity() {
+      return signedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getCallerData().role == 'it_security';
+    }
+
+    function isApprovedUser() {
+      return signedIn() && (
+        isAdmin() || 
+        isITSecurity()
+      );
+    }
+
+    // ── User profiles ────────────────────────────────────────────────────────
+    // Each document ID equals the Firebase Auth UID of that user.
+
+    match /users/{uid} {
+      // Any signed-in user can read their own profile.
+      // Admins can read and list all profiles.
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      // Any signed-in user can create their own profile on first sign-in.
+      allow create: if signedIn() && request.auth.uid == uid;
+
+      // Allow users to update their own profile, but protect role and approved status
+      allow update: if signedIn() && (
+        // Super Admins can manage all aspects of user profiles
+        isSuperAdmin() || 
+        // Asst. IT Admins can manage IT Security and Pending users, 
+        // but cannot assign admin/asst_admin roles or modify existing admins.
+        (isAdmin() && 
+          !(request.resource.data.role in ['admin', 'asst_admin']) &&
+          !(resource.data.role in ['admin', 'asst_admin'])
+        ) ||
+        // Regular users can update their own non-sensitive fields
+        (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'approved']))
+      );
+
+      // Only super admins can delete user profiles.
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Transactions ─────────────────────────────────────────────────────────
+
+    match /transactions/{documentId} {
+      allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
+                      request.resource.data.owner_uid == "anonymous";
+      // Approved users and anonymous can read
+      allow read: if true;
+      // Only admins can update, but only super admins can delete
+      allow update: if isOwner(resource.data) || isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Results ──────────────────────────────────────────────────────────────
+
+    match /results/{documentId} {
+      allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
+                      request.resource.data.owner_uid == "anonymous";
+      allow read: if isApprovedUser() || resource.data.owner_uid == "anonymous";
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Labeled transactions ─────────────────────────────────────────────────
+
+    match /labeled_transactions/{documentId} {
+      allow read: if true;
+      allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
+                      request.resource.data.owner_uid == "anonymous";
+      allow update: if (signedIn() && resource.data.owner_uid == request.auth.uid) ||
+                      resource.data.owner_uid == "anonymous";
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Activity logs ────────────────────────────────────────────────────────
+
+    match /activity_logs/{documentId} {
+      allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
+                      request.resource.data.owner_uid == "anonymous";
+      allow read: if isAdmin() || isOwner(resource.data);
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── ML models ────────────────────────────────────────────────────────────
+
+    match /models/{documentId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isSuperAdmin();
+    }
+
+    match /ml_models/{documentId} {
+      allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
+                      request.resource.data.owner_uid == "anonymous";
+      allow read: if true;
+      allow update: if isOwner(resource.data) || isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /ml_training_runs/{documentId} {
+      allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
+                      request.resource.data.owner_uid == "anonymous";
+      allow read: if true;
+      allow update: if isOwner(resource.data) || isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Living Profiles (Behavioral) ─────────────────────────────────────────
+
+    match /user_profiles/{documentId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Settings ─────────────────────────────────────────────────────────────
+
+    match /settings/{documentId} {
+      allow read: if true;
+      allow create, update: if isApprovedUser() || (request.resource.data.owner_uid == "anonymous" || !signedIn());
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── System Metadata (Counters) ───────────────────────────────────────────
+
+    match /system_metadata/{documentId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isSuperAdmin();
+    }
+  }
+}
