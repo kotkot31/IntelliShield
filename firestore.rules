@@ -82,8 +82,7 @@ service cloud.firestore {
     match /transactions/{documentId} {
       allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
                       request.resource.data.owner_uid == "anonymous";
-      // Approved users and anonymous can read
-      allow read: if true;
+      allow read: if signedIn();
       // Only admins can update, but only super admins can delete
       allow update: if isOwner(resource.data) || isAdmin();
       allow delete: if isSuperAdmin();
@@ -102,11 +101,8 @@ service cloud.firestore {
     // ── Labeled transactions ─────────────────────────────────────────────────
 
     match /labeled_transactions/{documentId} {
-      allow read: if true;
-      allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
-                      request.resource.data.owner_uid == "anonymous";
-      allow update: if (signedIn() && resource.data.owner_uid == request.auth.uid) ||
-                      resource.data.owner_uid == "anonymous";
+      allow read: if isApprovedUser();
+      allow create, update: if isAdmin();
       allow delete: if isSuperAdmin();
     }
 
@@ -123,15 +119,15 @@ service cloud.firestore {
     // ── ML models ────────────────────────────────────────────────────────────
 
     match /models/{documentId} {
-      allow read: if true;
-      allow create, update: if true;
+      allow read: if signedIn();
+      allow create, update: if isAdmin();
       allow delete: if isSuperAdmin();
     }
 
     match /ml_models/{documentId} {
       allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
                       request.resource.data.owner_uid == "anonymous";
-      allow read: if true;
+      allow read: if signedIn();
       allow update: if isOwner(resource.data) || isAdmin();
       allow delete: if isSuperAdmin();
     }
@@ -139,7 +135,7 @@ service cloud.firestore {
     match /ml_training_runs/{documentId} {
       allow create: if (signedIn() && request.resource.data.owner_uid == request.auth.uid) ||
                       request.resource.data.owner_uid == "anonymous";
-      allow read: if true;
+      allow read: if signedIn();
       allow update: if isOwner(resource.data) || isAdmin();
       allow delete: if isSuperAdmin();
     }
@@ -147,8 +143,8 @@ service cloud.firestore {
     // ── Living Profiles (Behavioral) ─────────────────────────────────────────
 
     match /user_profiles/{documentId} {
-      allow read: if true;
-      allow create, update: if true;
+      allow read: if signedIn();
+      allow create, update: if isApprovedUser();
       allow delete: if isSuperAdmin();
     }
 
@@ -163,8 +159,8 @@ service cloud.firestore {
     // ── System Metadata (Counters) ───────────────────────────────────────────
 
     match /system_metadata/{documentId} {
-      allow read: if true;
-      allow create, update: if true;
+      allow read: if signedIn();
+      allow create, update: if isAdmin();
       allow delete: if isSuperAdmin();
     }
   }
