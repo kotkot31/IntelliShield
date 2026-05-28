@@ -49,7 +49,7 @@ export default function CsvUpload({ onUploadComplete }) {
             setUploadedUrl(resolvedUrl);
 
             if (!resolvedUrl) {
-              setUploadError("Upload succeeded but URL is missing.");
+              setUploadError("Upload Rejected: Upload succeeded but URL is missing.");
               return;
             }
 
@@ -74,7 +74,7 @@ export default function CsvUpload({ onUploadComplete }) {
               const newTransactions = await filterExistingTransactions(result.validTransactions);
               
               if (newTransactions.length === 0 && result.validTransactions.length > 0) {
-                const dupError = "All transactions in this file have already been uploaded.";
+                const dupError = "Upload Rejected: All transactions in this file have already been uploaded.";
                 setUploadedUrl(""); // Prevent success banner showing alongside error
                 setUploadError(dupError);
                 
@@ -180,10 +180,14 @@ export default function CsvUpload({ onUploadComplete }) {
                 errorMessage.includes("empty");
                 
               setUploadedUrl(""); // prevent success banner showing alongside error
+              const finalMessage = errorMessage.startsWith("Upload Rejected")
+                ? errorMessage
+                : `Upload Rejected: ${errorMessage}`;
+
               setUploadError(
                 isAborted
-                  ? `🛑 ${errorMessage}`
-                  : `Error: ${errorMessage}`
+                  ? `🛑 ${finalMessage}`
+                  : `Error: ${finalMessage}`
               );
 
               // Log the failure — wrapped in its own try/catch so a Firestore
@@ -216,7 +220,12 @@ export default function CsvUpload({ onUploadComplete }) {
             setIsSaving(false);
             setIsUpdatingProfiles(false);
             setUploadedUrl("");
-            setUploadError(error.message || "Upload failed.");
+            const errMsg = error.message || "Upload failed.";
+            setUploadError(
+              errMsg.startsWith("Upload Rejected")
+                ? errMsg
+                : `Upload Rejected: ${errMsg}`
+            );
           }}
           appearance={{
             button:
