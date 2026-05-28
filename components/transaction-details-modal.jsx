@@ -35,6 +35,15 @@ export default function TransactionDetailsModal({ transaction, onClose, onLabelC
   const [localMfaStatus, setLocalMfaStatus] = useState(transaction?.mfaStatus || null);
   const { user } = useAuth();
 
+  const triggerReason =
+    transaction?.rulesTriggered?.includes("impossible_travel")
+      ? "impossible_travel"
+      : transaction?.rulesTriggered?.includes("new_or_different_location") || transaction?.rulesTriggered?.includes("new_location_for_user")
+        ? "new_location"
+        : (transaction?.fraudProbability ?? 0) >= 0.7
+          ? "high_risk_score"
+          : "suspicious_activity";
+
   useEffect(() => {
     setLocalLabel(transaction?.manualLabel);
     setLocalMfaStatus(transaction?.mfaStatus || null);
@@ -187,6 +196,52 @@ export default function TransactionDetailsModal({ transaction, onClose, onLabelC
             <span className="font-semibold text-slate-900 dark:text-slate-100">Record ID:</span> {transaction.id}{" "}
             <span className="ml-6 font-semibold text-slate-900 dark:text-slate-100">Created at:</span> {formatDate(transaction.created_at)}
           </p>
+          {((localLabel !== undefined && localLabel !== null) || localMfaStatus) ? (
+            <>
+              <div className="h-px w-full bg-slate-200 dark:bg-slate-700 my-1"></div>
+              <div>
+                <span className="font-semibold text-slate-900 dark:text-slate-100 block mb-1">Audit Remarks:</span>
+                <ul className="list-disc pl-5 space-y-1 text-xs text-slate-600 dark:text-slate-400">
+                  {localLabel !== undefined && localLabel !== null && (
+                    <li>
+                      <strong>Manual Override:</strong> Status marked as{" "}
+                      <span className={localLabel === 1 ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-emerald-600 dark:text-emerald-400 font-semibold"}>
+                        {localLabel === 1 ? "True Fraud" : "Legitimate"}
+                      </span>{" "}
+                      by {localLabel === transaction.manualLabel ? (transaction.labeled_by_email || "an analyst") : (user?.email || "you")}
+                      {localLabel === transaction.manualLabel && transaction.labeled_at ? ` on ${formatDate(transaction.labeled_at)}` : " just now"}.
+                    </li>
+                  )}
+                  {localMfaStatus && (
+                    <li>
+                      <strong>MFA Verification:</strong> Challenge{" "}
+                      <span className={
+                        localMfaStatus === "mfa_verified"
+                          ? "text-emerald-600 dark:text-emerald-400 font-semibold"
+                          : localMfaStatus === "mfa_required"
+                            ? "text-blue-600 dark:text-blue-400 font-semibold"
+                            : "text-rose-600 dark:text-rose-400 font-semibold"
+                      }>
+                        {localMfaStatus === "mfa_verified"
+                          ? "Passed (Approved)"
+                          : localMfaStatus === "mfa_required"
+                            ? "Initiated (Pending)"
+                            : localMfaStatus === "mfa_timed_out"
+                              ? "Timed Out (Rejected)"
+                              : "Failed (Rejected)"}
+                      </span>
+                      {` due to ${(transaction.mfaReason || triggerReason).replace(/_/g, " ")}`}
+                      {localMfaStatus === "mfa_required" 
+                        ? (localMfaStatus === transaction.mfaStatus && transaction.mfaTriggeredAt ? ` at ${formatDate(transaction.mfaTriggeredAt)}` : " just now")
+                        : (localMfaStatus === transaction.mfaStatus && transaction.mfaResolvedAt ? ` at ${formatDate(transaction.mfaResolvedAt)}` : " just now")
+                      }
+                      {transaction.mfaAttempts ? ` (${transaction.mfaAttempts} attempt(s) made)` : ""}.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {/* MFA Simulation Section */}
