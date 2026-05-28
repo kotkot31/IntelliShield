@@ -75,6 +75,7 @@ export default function CsvUpload({ onUploadComplete }) {
               
               if (newTransactions.length === 0 && result.validTransactions.length > 0) {
                 const dupError = "All transactions in this file have already been uploaded.";
+                setUploadedUrl(""); // Prevent success banner showing alongside error
                 setUploadError(dupError);
                 
                 await logActivity({
@@ -98,7 +99,7 @@ export default function CsvUpload({ onUploadComplete }) {
                 newTransactions,
               );
               const mlResult = await applyMlScoring({
-                ownerUid: "anonymous",
+                ownerUid: userId,
                 transactions: ruleScoredTransactions,
               });
               const scoredTransactions = mlResult.transactions;
@@ -144,7 +145,7 @@ export default function CsvUpload({ onUploadComplete }) {
                   transactions: scoredTransactions,
                   uploadedFileUrl: resolvedUrl,
                   invalidRows: result.invalidRows,
-                  ownerUid: "anonymous",
+                  ownerUid: userId,
                 });
                 
                 setIsSaving(false);
